@@ -38,6 +38,7 @@
 #include "common/maths.h"
 #include "common/time.h"
 #include "common/crc.h"
+#include "common/log.h"
 
 #include "config/parameter_group.h"
 #include "config/parameter_group_ids.h"
@@ -59,6 +60,7 @@
 #include "io/osd.h"
 #include "io/osd_dji_hd.h"
 #include "io/osd_common.h"
+#include "io/osd_hud.h"
 
 #include "rx/rx.h"
 
@@ -101,7 +103,8 @@
 // changing OSD_MESSAGE_LENGTH
 #define OSD_MESSAGE_LENGTH 28
 
-#define OSD_ALTERNATING_CHOICES(ms, num_choices) ((millis() / ms) % num_choices)
+#define OSD_ALTERNATING_CHOICES(ms, radar_tgts) ((millis() / ms) % radar_tgts)
+#define OSD_RADAR_CHOICES(ms, num_choices) ((millis() / ms) % num_choices)
 #define _CONST_STR_SIZE(s) ((sizeof(s)/sizeof(s[0]))-1) // -1 to avoid counting final '\0'
 
 // Wrap all string constants intenteded for display as messages with
@@ -709,6 +712,174 @@ static void osdDJIFormatDistanceStr(char *buff, int32_t dist)
     }
 }
 
+static inline int32_t osdGetAltitudeMsl(void)
+{
+#if defined(USE_NAV)
+    return getEstimatedActualPosition(Z)+GPS_home.alt;
+#elif defined(USE_BARO)
+    return baro.alt+GPS_home.alt;
+#else
+    return 0;
+#endif
+}
+
+static void osdDJIFormatRadar(char *buff) {
+
+    int8_t poiId = 0;
+
+    static unsigned long timeSinceLastChange = 0;
+    static unsigned long timeSinceLastUpdate = 0;
+
+    static int8_t validPois [4]= {-1, -1 , -1, -1};
+    static int8_t validPoiPointer = 0;
+
+    static int8_t validPoiCount = 0;
+
+    fpVector3_t poi;
+    
+    if(osdConfig()->hud_radar_disp == 0) {
+        tfp_sprintf(buff, "%s", "No Radar Set");
+        return;
+    }
+
+    if(millis() - timeSinceLastUpdate > 10000 || timeSinceLastUpdate == 0) {  //Check if targets have been added or removed
+
+        //LOG_D(SYSTEM, "Refresh POI's");
+        for(uint8_t i = 0; i < 4; i++) {
+            validPois[i] = -1; //Reset POIs
+        }
+        validPoiCount = 0;
+
+        for (uint8_t i = 0; i < osdConfig()->hud_radar_disp; i++) { //Cycle through radar POI list
+        //Find valid radar targets
+           // LOG_D(SYSTEM, "Aircraft %d Check", i);
+            if (radar_pois[i].gps.lat != 0 && radar_pois[i].gps.lon != 0 && radar_pois[i].state < 2) { // state 2 means POI has been lost and must be skipped
+              //  LOG_D(SYSTEM, "Lat: %ld, Lng: %ld, state: %d", radar_pois[i].gps.lat, radar_pois[i].gps.lon, radar_pois[i].state);
+                geoConvertGeodeticToLocal(&poi, &posControl.gpsOrigin, &radar_pois[i].gps, GEO_ALT_RELATIVE);
+
+                radar_pois[i].distance = calculateDistanceToDestination(&poi) / 100; //in meters
+             //   LOG_D(SYSTEM, "Distance %d", radar_pois[i].distance);
+                if(radar_pois[i].distance >= osdConfig()->hud_radar_range_min) { 
+                //    LOG_D(SYSTEM, "Aircraft %d is valid", i);
+                    validPois[validPoiCount] = i;  //
+                    validPoiCount++;
+                } else {
+                 //   LOG_D(SYSTEM, "Aircraft %d is too close", i);
+                }
+            } else {
+             //   LOG_D(SYSTEM, "Aircraft %d is NOT valid", i);
+            }
+        }
+
+        timeSinceLastUpdate = millis();
+    }
+
+    if(validPois[0] == -1) { //No valid target was found
+        tfp_sprintf(buff, "%s", "No Targets");
+        return;
+    }
+
+    if(millis() - timeSinceLastChange > 3000) 
+    {
+        //LOG_D(SYSTEM, "Change to new aircraft from: %d", validPoiPointer);
+        validPoiPointer++;
+
+        if(validPoiPointer > validPoiCount)
+            validPoiPointer = 0;
+
+        if(validPois[validPoiPointer] == -1) 
+            validPoiPointer = 0; 
+
+        timeSinceLastChange = millis();
+    }    
+
+    poiId = validPois[validPoiPointer];
+    geoConvertGeodeticToLocal(&poi, &posControl.gpsOrigin, &radar_pois[poiId].gps, GEO_ALT_RELATIVE);
+
+    radar_pois[poiId].distance = calculateDistanceToDestination(&poi) / 100; //in meters
+    radar_pois[poiId].direction = osdGetHeadingAngle((calculateBearingToDestination(&poi) / 100) - DECIDEGREES_TO_DEGREES(osdGetHeading()));
+    radar_pois[poiId].altitude = (radar_pois[poiId].gps.alt - osdGetAltitudeMsl()) / 100;
+
+    char *poiName = "Z";
+
+    switch(poiId) {
+        case 0:
+            poiName = "A";
+            break;
+        case 1:
+            poiName = "B";
+            break;
+        case 2:
+            poiName = "C";
+            break;
+        case 3:
+            poiName = "D";
+            break;
+    }
+    
+    switch (osdConfig()->units) {
+        case OSD_UNIT_IMPERIAL:
+            FALLTHROUGH;
+        case OSD_UNIT_UK:
+            
+            radar_pois[poiId].distance = (int) radar_pois[poiId].distance * 3.28 / 10;
+            radar_pois[poiId].altitude = (int) radar_pois[poiId].altitude * 3.28;
+
+            break;
+        case OSD_UNIT_METRIC:
+
+            radar_pois[poiId].distance = (int) radar_pois[poiId].distance / 10;
+            radar_pois[poiId].altitude = (int) radar_pois[poiId].altitude;
+
+            break;
+    }
+
+    if(radar_pois[poiId].distance >= 1000)
+        radar_pois[poiId].distance = 999;
+    if(radar_pois[poiId].altitude >= 1000)
+        radar_pois[poiId].altitude = 999;
+
+    char *dir;
+    
+    dir = " ";
+
+    if(radar_pois[poiId].direction <= 22.5)dir = "↑";
+    else if(radar_pois[poiId].direction <= 67.5)dir = "↗";
+    else if(radar_pois[poiId].direction <= 112.5)dir = "→";
+    else if(radar_pois[poiId].direction <= 157.5)dir = "↘";
+    else if(radar_pois[poiId].direction <= 202.5)dir = "↓";
+    else if(radar_pois[poiId].direction <= 247.5)dir = "↙";
+    else if(radar_pois[poiId].direction <= 292.5)dir = "←";
+    else if(radar_pois[poiId].direction <= 337.5)dir = "↖";
+    else if(radar_pois[poiId].direction <= 360)dir = "↑";
+
+    //LOG_D(SYSTEM, "Test POI, %s", poiName);
+  /*   LOG_D(SYSTEM, "Test direction, %d", radar_pois[poiId].direction);
+    LOG_D(SYSTEM, "Test heading, %d", osdGetHeading());
+
+    LOG_D(SYSTEM, "gps lat long, %ld, %ld", posControl.gpsOrigin.lat, posControl.gpsOrigin.lon);
+
+    LOG_D(SYSTEM, "Test POI, %d", poiId);
+    LOG_D(SYSTEM, "Test lq, %d", radar_pois[poiId].lq);
+    LOG_D(SYSTEM, "Test altitude, %ld", radar_pois[poiId].gps.alt);
+    LOG_D(SYSTEM, "Test altitude Host, %ld", osdGetAltitudeMsl());
+    LOG_D(SYSTEM, "Test lat, %ld", radar_pois[poiId].gps.lat);
+    LOG_D(SYSTEM, "Test long, %ld", radar_pois[poiId].gps.lon);
+    LOG_D(SYSTEM, "Test distance, %d", radar_pois[poiId].distance);
+    LOG_D(SYSTEM, "Test direction, %d", radar_pois[poiId].direction);
+    LOG_D(SYSTEM, "Test relative altitude, %d", radar_pois[poiId].altitude);
+    LOG_D(SYSTEM, "Test state, %d", radar_pois[poiId].state);
+    
+    LOG_D(SYSTEM, "%s %s D%d A%d ", poiName, dir, radar_pois[poiId].distance, radar_pois[poiId].altitude);
+    LOG_D(SYSTEM, "------------------------------");
+ */
+  //  tfp_sprintf(buff, "%s%s H%dB%d ", poiName, dir, radar_pois[poiId].direction, DECIDEGREES_TO_DEGREES(osdGetHeading()));
+
+   
+    tfp_sprintf(buff, "%s %s D%d A%d ", poiName, dir, radar_pois[poiId].distance, radar_pois[poiId].altitude);
+
+}
+
 static void osdDJIEfficiencyMahPerKM(char *buff)
 {
     // amperage is in centi amps, speed is in cms/s. We want
@@ -742,7 +913,8 @@ static void osdDJIEfficiencyMahPerKM(char *buff)
 
 static void djiSerializeCraftNameOverride(sbuf_t *dst, const char * name)
 {
-    // :W T S E D
+    // :W T S E D R
+    //  | | | | | Radar 
     //  | | | | Distance Trip
     //  | | | Efficiency mA/KM
     //  | | S 3dSpeed
@@ -772,6 +944,9 @@ static void djiSerializeCraftNameOverride(sbuf_t *dst, const char * name)
                 break;
             case 'D':
                 osdDJIFormatDistanceStr(djibuf, getTotalTravelDistance());
+                break;
+            case 'R':
+                osdDJIFormatRadar(djibuf);
                 break;
             case 'W':
                 tfp_sprintf(djibuf, "%s", "MAKE_W_FIRST");
