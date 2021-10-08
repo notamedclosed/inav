@@ -779,7 +779,7 @@ static void osdDJIFormatRadar(char *buff) {
         return;
     }
 
-    if(millis() - timeSinceLastChange > 3000) 
+    if(millis() - timeSinceLastChange > 1000) 
     {
         //LOG_D(SYSTEM, "Change to new aircraft from: %d", validPoiPointer);
         validPoiPointer++;

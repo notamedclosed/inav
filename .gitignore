@@ -5,6 +5,7 @@
 *.dep
 *.bak
 *.uvgui.*
+*.code-workspace
 .project
 .settings
 .cproject
