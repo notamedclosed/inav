@@ -46,6 +46,7 @@
 #include "fc/fc_core.h"
 #include "fc/config.h"
 #include "fc/controlrate_profile.h"
+#include "fc/rc_adjustments.h"
 #include "fc/fc_msp.h"
 #include "fc/fc_msp_box.h"
 #include "fc/runtime_config.h"
@@ -751,14 +752,14 @@ static void osdDJIFormatRadar(char *buff) {
 
         for (uint8_t i = 0; i < osdConfig()->hud_radar_disp; i++) { //Cycle through radar POI list
         //Find valid radar targets
-            if (radar_pois[i].gps.lat != 0 && radar_pois[i].gps.lon != 0 && radar_pois[i].state < 2) { // state 2 means POI has been lost and must be skipped
-                geoConvertGeodeticToLocal(&poi, &posControl.gpsOrigin, &radar_pois[i].gps, GEO_ALT_RELATIVE);
+            if (radar_pois[i].gps.lat != 0 && radar_pois[i].gps.lon != 0 /* && radar_pois[i].state < 2 */) { // state 2 means POI has been lost and must be skipped
+                //geoConvertGeodeticToLocal(&poi, &posControl.gpsOrigin, &radar_pois[i].gps, GEO_ALT_RELATIVE);
 
-                radar_pois[i].distance = calculateDistanceToDestination(&poi) / 100; //in meters
-                if(radar_pois[i].distance >= osdConfig()->hud_radar_range_min) { 
+                //radar_pois[i].distance = calculateDistanceToDestination(&poi) / 100; //in meters
+                //if(radar_pois[i].distance >= osdConfig()->hud_radar_range_min) { 
                     validPois[validPoiCount] = i;  //
                     validPoiCount++;
-                } 
+                //} 
             } 
         }
 
@@ -793,7 +794,8 @@ static void osdDJIFormatRadar(char *buff) {
 
     radar_pois[poiId].distance = calculateDistanceToDestination(&poi) / 100; //in meters
     radar_pois[poiId].direction = osdGetHeadingAngle((calculateBearingToDestination(&poi) / 100) - DECIDEGREES_TO_DEGREES(osdGetHeading()));
-    radar_pois[poiId].altitude = (radar_pois[poiId].gps.alt - osdGetAltitudeMsl()) / 100;
+    //radar_pois[poiId].altitude = (radar_pois[poiId].gps.alt - osdGetAltitudeMsl()) / 100;
+    radar_pois[poiId].altitude = radar_pois[poiId].gps.alt / 100;
 
     char *poiName = "Z";
 
@@ -811,6 +813,8 @@ static void osdDJIFormatRadar(char *buff) {
         case 3:
             poiName = "D";
             break;
+        default:
+            poiName =  "?";
     }
     
     switch (osdConfig()->units) {
@@ -835,8 +839,8 @@ static void osdDJIFormatRadar(char *buff) {
     //look into auto scaling
     if(radar_pois[poiId].distance >= 1000)
         radar_pois[poiId].distance = 999;
-    if(radar_pois[poiId].altitude >= 1000)
-        radar_pois[poiId].altitude = 999;
+    //if(radar_pois[poiId].altitude >= 1000)
+    //    radar_pois[poiId].altitude = 999;
 
     char *dir;
     
@@ -852,8 +856,14 @@ static void osdDJIFormatRadar(char *buff) {
     else if(radar_pois[poiId].direction <= 292.5)dir = "←";
     else if(radar_pois[poiId].direction <= 337.5)dir = "↖";
     else if(radar_pois[poiId].direction <= 360)dir = "↑";
+
+    char *poiState = " "; //default is no warning
+
+    if(radar_pois[poiId].state == 2)  //State 2 means lost, so add a warning the data might not be useful
+        poiState = "!";
    
-    tfp_sprintf(buff, "%s %s D%d A%d ", poiName, dir, radar_pois[poiId].distance, radar_pois[poiId].altitude);
+    tfp_sprintf(buff, "%s%s%s D%d A%d ", poiName, poiState, dir, radar_pois[poiId].distance, radar_pois[poiId].altitude);
+    //Outputs something like: A ↗ D10 A3450
 
 }
 
@@ -1005,6 +1015,31 @@ static void djiSerializeCraftNameOverride(sbuf_t *dst, const char * name)
                     }
                     if (FLIGHT_MODE(HEADFREE_MODE)) {
                         messages[messageCount++] = "(HEADFREE)";
+                    }
+                    //ADJUSTMENT_ROLL_P, ADJUSTMENT_ROLL_I, ADJUSTMENT_ROLL_D, ADJUSTMENT_ROLL_FF
+                    if (isAdjustmentFunctionSelected(ADJUSTMENT_ROLL_P)) {
+                        messages[messageCount++] = "(ROLL P)";
+                    }
+                    if (isAdjustmentFunctionSelected(ADJUSTMENT_ROLL_I)) {
+                        messages[messageCount++] = "(ROLL I)";
+                    }
+                    if (isAdjustmentFunctionSelected(ADJUSTMENT_ROLL_D)) {
+                        messages[messageCount++] = "(ROLL D)";
+                    }
+                    if (isAdjustmentFunctionSelected(ADJUSTMENT_ROLL_FF)) {
+                        messages[messageCount++] = "(ROLL FF)";
+                    }
+                    if (isAdjustmentFunctionSelected(ADJUSTMENT_PITCH_P)) {
+                        messages[messageCount++] = "(PITCH P)";
+                    }
+                    if (isAdjustmentFunctionSelected(ADJUSTMENT_PITCH_I)) {
+                        messages[messageCount++] = "(PITCH I)";
+                    }
+                    if (isAdjustmentFunctionSelected(ADJUSTMENT_PITCH_D)) {
+                        messages[messageCount++] = "(PITCH D)";
+                    }
+                    if (isAdjustmentFunctionSelected(ADJUSTMENT_PITCH_FF)) {
+                        messages[messageCount++] = "(PITCH FF)";
                     }
                 }
                 // Pick one of the available messages. Each message lasts
