@@ -6,8 +6,24 @@ This fork is specifically dealing with implementing iNav Radar for use with the 
 If you are not familiar iNav Radar please check out the following RCGroups thread.
 [RCGroups](https://www.rcgroups.com/forums/showthread.php?3304673-iNav-Radar-ESP32-LoRa-modems)
 
-Radar was designed around analog. It currently does not work on stock for DJI.  For DJI we have to do things a little different, you get something that looks like this:
+Radar was designed around analog. It currently does not work on stock iNav for the DJI FPV system.  For DJI we have to do things a little different, with this fork you get something that looks like this:
 ![RADAR](https://imgur.com/s4t1Z3Bl.jpg)
+
+## HOW TO READ
+
+The red circle was the aircraft we were following, the circle was added after.  Since DJI doesn't capture the OSD it is hard to show this process.
+
+The DJI craft name will output something like the following string:
+
+"A ↗ D11 A15"
+
+A is the craft ID.  iNav Radar goes A-D based on start time.  First craft gets slot A, then B, etc.
+
+↗ is the pointer to the target aircraft
+
+D is the distance in 10's of your selected unit.  So Feet or Meters.  IE this shows 110 Feet.
+
+A15 is the relative height (not working correctly).  No sign means above you, - is below you.  Then the relative height in your selected units.  So this is 15 feet.
 
 Oliver_C is the original developer of iNav Radar.  He has nicely hosted some builds of 3.0.2 with the DJI fork available here.
 
@@ -23,27 +39,18 @@ Altitude is unreliable at this point.
 
 ## Installation steps
 
-* Install the custom iNav build from the link above or build yourself
+* Install the custom iNav build from the link above or build yourself (Don't do it on planes you aren't willing to risk)
 * Setup iNav radar as per the RCGroups thread
-* Enable DJI craft name hack (3.0.2) and add "R".  So it looks like ":WR".  Adding more elements is not recommended as it takes to long to cycle.
+* * Add ESP32 LORA module
+* * Enable MSP on Lora port and speed of 115200
+* * Important CLI steps to not miss:
+* * set osd_hud_radar_disp = 3
+* * set osd_hud_radar_range_min = 1
+* Enable DJI craft name hack (3.0.2) and add "R".  So it looks like ":WR".  Adding more elements is not recommended as it takes too long to cycle.
 * Fly with friends and have fun
 * Report back if you have any problems or suggestions.
 
-## HOW TO READ
-
-The DJI craft name will output the following string:
-
-"A ↗ D11 A+15"
-
-A is the craft ID.  iNav Radar goes A-D based on start time.  First craft gets slot A, then B, etc.
-
-↗ is the pointer to the target aircraft
-
-D is the distance in 10's of your selected unit.  So Feet or Meters.  IE this shows 110 Feet.
-
-A+15 is the relative height (not working correctly).  + is above you, - is below you.  Then the relative height in your selected units.  So this is 15 feet.
-
-### - INAV DEFAULT TEXT AFTER THIS
+# - INAV DEFAULT TEXT AFTER THIS
 
 # INAV - navigation capable flight controller
 
