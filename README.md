@@ -1,3 +1,50 @@
+
+# INAV DJI RADAR
+
+This fork is specifically dealing with implementing iNav Radar for use with the DJI FPV system.
+
+If you are not familiar iNav Radar please check out the following RCGroups thread.
+[RCGroups](https://www.rcgroups.com/forums/showthread.php?3304673-iNav-Radar-ESP32-LoRa-modems)
+
+Radar was designed around analog. It currently does not work on stock for DJI.  For DJI we have to do things a little different, you get something that looks like this:
+![RADAR](https://imgur.com/s4t1Z3Bl.jpg)
+
+Oliver_C is the original developer of iNav Radar.  He has nicely hosted some builds of 3.0.2 with the DJI fork available here.
+
+[Dropbox](https://www.dropbox.com/sh/ib3ffejdk5hf90k/AAA7W8h9KnwxPtlQtectK-PGa?dl=0)
+
+You can build iNav from this repository as well.  Refer to the developer documentation.
+
+Once I've got 4.0.0 RC integrated and tested I'll put some builds up for 4.0.
+
+Use at your own risk.  Code changes are available here, but have not been vetted or extensively tested.
+
+Altitude is unreliable at this point.
+
+## Installation steps
+
+* Install the custom iNav build from the link above or build yourself
+* Setup iNav radar as per the RCGroups thread
+* Enable DJI craft name hack (3.0.2) and add "R".  So it looks like ":WR".  Adding more elements is not recommended as it takes to long to cycle.
+* Fly with friends and have fun
+* Report back if you have any problems or suggestions.
+
+## HOW TO READ
+
+The DJI craft name will output the following string:
+
+"A ↗ D11 A+15"
+
+A is the craft ID.  iNav Radar goes A-D based on start time.  First craft gets slot A, then B, etc.
+
+↗ is the pointer to the target aircraft
+
+D is the distance in 10's of your selected unit.  So Feet or Meters.  IE this shows 110 Feet.
+
+A+15 is the relative height (not working correctly).  + is above you, - is below you.  Then the relative height in your selected units.  So this is 15 feet.
+
+### - INAV DEFAULT TEXT AFTER THIS
+
 # INAV - navigation capable flight controller
 
 ![INAV](http://static.rcgroups.net/forums/attachments/6/1/0/3/7/6/a9088858-102-inav.png)
